@@ -95,6 +95,61 @@ not the platform.
 - **Database** — PostgreSQL
 - **Editor** — Cursor
 
+## Database Design
+
+church_management_system uses PostgreSQL as its database.
+Tables are organized around the core domains of the system:
+
+- **congregations** — each church using the platform as a tenant
+- **subscriptions** — billing status and cycle per congregation
+- **congregation_modules** — which modules each congregation has enabled
+- **congregation_module_history** — full audit trail of module changes
+- **users** — staff and admins with role-based access
+- **people** — congregation members and contacts
+- **households** — family units linked to people
+- **staff** — staff records linked to people
+- **services** — individual church services
+- **attendance** — attendance records per person per service
+- **schedules** — staff and volunteer scheduling
+- **announcements** — congregation-wide communications
+- **giving** — individual donation records
+- **funds** — designated budget categories
+- **budgets** — budget tracking per fund
+
+All tables include a congregation_id ensuring complete data 
+isolation between congregations.
+
+## Module Registry
+
+The module registry is the core of the modular system. It maintains 
+a master list of all available modules in code, and tracks which 
+modules each congregation has enabled in the database.
+
+Each module definition includes:
+- **name** — unique identifier
+- **label** — display name
+- **description** — shown to congregation admins
+- **icon** — displayed on module cards
+- **enabled_by_default** — whether it activates on signup
+
+All modules are always visible to congregation admins — including 
+disabled ones — so they always know what options are available. 
+Modules are presented as cards with descriptions and a simple 
+toggle. The Manage Modules panel is accessible directly from 
+the dashboard.
+
+## Onboarding Flow
+
+New congregations go through a five step self-service onboarding:
+
+1. **Create Account** — admin name, email, password, terms of service
+2. **Congregation Profile** — name, address, phone, approximate size
+3. **Subscription** — billing cycle selection and payment
+4. **Choose Modules** — select which modules to activate, 
+   pre-suggested based on congregation size, changeable at any time
+5. **Welcome Dashboard** — dashboard loads with chosen modules active,
+   brief tooltip tour, Manage Modules prominently accessible
+
 ## Getting Started
 
 > Setup instructions coming as the project takes shape
