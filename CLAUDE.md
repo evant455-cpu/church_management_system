@@ -4,11 +4,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Status
 
-Early planning / scaffolding phase. The technology stack has not yet been chosen. No build, test, or run commands exist yet — update this file as the stack is decided and scaffolding is added.
+Early planning / scaffolding phase. No build, test, or run commands exist yet — update this file as scaffolding is added.
 
 ## What This Is
 
 A self-service SaaS platform for church management. Congregations sign up, configure their own account, and manage staff, members, and operations through a single dashboard. Each congregation's data is fully isolated from all others (multi-tenant).
+
+## Stack
+
+- **Language** — Python
+- **Framework** — Django
+- **Database** — PostgreSQL
 
 ## Core Architectural Constraints
 
@@ -21,6 +27,10 @@ These decisions are already made and must be honored by all implementation choic
 **Dashboard adapts to active modules**: The dashboard only surfaces enabled modules. Navigation, widgets, and quick-actions must be dynamically driven by the set of active modules for the authenticated congregation.
 
 **Role-based access**: Staff only see what their role permits within a congregation.
+
+**Subscription read-only mode**: A lapsed subscription locks the account to read-only — no creates or updates until payment is renewed. Full access restores immediately on renewal. Data is never deleted due to a lapsed subscription.
+
+**Data ownership**: All data belongs to the congregation. Congregations must always be able to export their data.
 
 ## Modules
 
@@ -39,4 +49,4 @@ These decisions are already made and must be honored by all implementation choic
 - Simple enough for a small congregation with no IT staff
 - Scalable to large church complexity
 - Self-service from signup through daily operation
-- Billing is per congregation based on subscription tier
+- Single subscription tier — all modules available to every congregation, no feature gating by plan
