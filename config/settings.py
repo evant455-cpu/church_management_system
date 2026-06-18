@@ -77,7 +77,12 @@ ROOT_URLCONF = "config.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        # DIRS takes priority over every app's own templates/ dir (app_dirs),
+        # regardless of INSTALLED_APPS order -- needed here because
+        # django.contrib.admin ships its own registration/password_reset_*.html
+        # templates and is listed before our local apps, so without this our
+        # versions would silently be shadowed by admin's admin-styled ones.
+        "DIRS": [BASE_DIR / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -124,3 +129,16 @@ USE_TZ = True
 STATIC_URL = "static/"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+
+# --- Auth -------------------------------------------------------------
+
+LOGIN_URL = "login"
+LOGIN_REDIRECT_URL = "home"
+LOGOUT_REDIRECT_URL = "login"
+
+# Console backend for dev -- prints password-reset emails to stdout instead
+# of sending real mail. Real SMTP/SES is a deployment concern (Phase 13).
+EMAIL_BACKEND = env(
+    "EMAIL_BACKEND", default="django.core.mail.backends.console.EmailBackend"
+)
