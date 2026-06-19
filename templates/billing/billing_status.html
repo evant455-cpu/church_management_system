@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Billing{% endblock %}
+{% block content %}
+  <h1>Billing</h1>
+  {% if subscription %}
+    <table>
+      <tr><th>Status</th><td>{{ subscription.get_status_display }}</td></tr>
+      <tr><th>Trial ends</th><td>{{ subscription.trial_ends_at|default:"—" }}</td></tr>
+      <tr><th>Current period ends</th><td>{{ subscription.current_period_end|default:"—" }}</td></tr>
+      <tr><th>Cancels at period end</th><td>{{ subscription.cancel_at_period_end|yesno:"Yes,No" }}</td></tr>
+    </table>
+  {% else %}
+    <p>No subscription on file yet.</p>
+  {% endif %}
+{% endblock %}

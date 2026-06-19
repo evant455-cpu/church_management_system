@@ -142,3 +142,16 @@ LOGOUT_REDIRECT_URL = "login"
 EMAIL_BACKEND = env(
     "EMAIL_BACKEND", default="django.core.mail.backends.console.EmailBackend"
 )
+
+
+# --- Stripe -------------------------------------------------------------
+
+# Defaults let the dev server and test suite boot without real Stripe
+# credentials -- every actual Stripe call in this codebase goes through
+# apps.billing.stripe_client, which is what tests mock, so these
+# placeholder values are never sent over the wire during `manage.py test`.
+STRIPE_SECRET_KEY = env("STRIPE_SECRET_KEY", default="sk_test_placeholder")
+STRIPE_WEBHOOK_SECRET = env("STRIPE_WEBHOOK_SECRET", default="whsec_placeholder")
+# Single-tier product (subscription_billing_schema.md) -- one Stripe
+# Price ID for the whole app, no plan-comparison logic.
+STRIPE_PRICE_ID = env("STRIPE_PRICE_ID", default="price_placeholder")

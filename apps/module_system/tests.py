@@ -5,6 +5,7 @@ from django.test import Client, TestCase
 from django.urls import reverse
 
 from apps.accounts.models import User
+from apps.billing.models import Subscription
 from apps.module_system.models import (
     CongregationModule,
     CongregationModuleHistory,
@@ -30,6 +31,15 @@ class ModuleSystemTestCase(TestCase):
     any test runs -- the test database is created via `migrate`, which
     fires the post_migrate signal that calls sync_modules() automatically,
     same as production. No setUp() boilerplate needed to seed them.
+
+    Also creates an `active` Subscription -- Phase 4 made the billing
+    layer of the access gate fail closed on a missing Subscription row
+    (see module_system.access._billing_check_passes), and this fixture's
+    Congregation is created directly rather than through Phase 5's real
+    signup transaction, so without this it would have no Subscription
+    row at all and every test below that exercises access_required would
+    incorrectly get blocked by layer 3 rather than testing what it's
+    actually meant to test (the module check, layer 2).
     """
 
     def setUp(self):
@@ -43,6 +53,13 @@ class ModuleSystemTestCase(TestCase):
             congregation=self.congregation,
             person=self.person,
         )
+        Subscription.objects.create(
+            congregation=self.congregation,
+            stripe_customer_id="cus_test_fixture",
+            stripe_subscription_id="sub_test_fixture",
+            status=Subscription.Status.ACTIVE,
+        )
+
 
 
 # --- Registry sync -----------------------------------------------------
