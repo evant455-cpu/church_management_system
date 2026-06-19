@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Modules{% endblock %}
+{% block content %}
+  <h1>Modules</h1>
+  <table>
+    <tr><th>Module</th><th>Status</th><th></th></tr>
+    {% for cm in congregation_modules %}
+      <tr>
+        <td>{{ cm.module.name }}</td>
+        <td>{{ cm.is_enabled|yesno:"Enabled,Disabled" }}</td>
+        <td>
+          <form method="post" action="{% url 'module_system:toggle_module' cm.module.key %}">
+            {% csrf_token %}
+            {% if cm.is_enabled %}
+              <input type="hidden" name="action" value="disable">
+              <button type="submit">Disable</button>
+            {% else %}
+              <input type="hidden" name="action" value="enable">
+              <button type="submit">Enable</button>
+            {% endif %}
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+  </table>
+{% endblock %}
