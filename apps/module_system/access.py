@@ -4,12 +4,13 @@ subscription_billing_schema.md for the full three-layer design:
 billing status, then module-enabled, then permission.
 
 `access_required` is the single, extensible entry point every
-module-owned view goes through. This phase only implements the module
-check; billing (Phase 4) and permission (Phase 3) are wired in as
-always-pass stubs so the order is fixed once, here, rather than left to
-however individual views stack decorators. Later phases fill in the stub
-bodies -- the decorator's call signature and the order of checks don't
-change.
+module-owned view goes through. Phase 2 implemented the module check;
+Phase 3 (this one) fills in the real permission check against
+apps.permissions. Billing (Phase 4) remains an always-pass stub for now,
+so the order is fixed once, here, rather than left to however individual
+views stack decorators. The decorator's call signature and the order of
+checks haven't changed since Phase 2 -- existing call sites that only
+pass `module=` keep working exactly as before.
 """
 
 from functools import wraps
@@ -24,8 +25,27 @@ def _billing_check_passes(request):
 
 
 def _permission_check_passes(request, permission):
-    """Stub for Phase 3 -- always passes until roles/permissions exist."""
-    return True
+    """
+    Phase 3 -- real check against the roles/permissions engine.
+
+    permission=None means the view isn't permission-gated at all (mirrors
+    module=None for the module check above) and always passes. Otherwise
+    delegates to apps.permissions.services.user_has_permission(), which
+    resolves the user's effective permissions (union of role grants, plus
+    override-grants, minus override-revokes). is_superuser/is_staff is
+    deliberately NOT special-cased here -- per apps/accounts/models.py,
+    that's the platform-operator Django Admin escape hatch, fully separate
+    from this in-app RBAC system.
+
+    Imported locally, same reason _module_enabled() imports its model
+    locally: avoids a hard import-time dependency between apps for what's
+    otherwise just a thin app-boundary function.
+    """
+    if permission is None:
+        return True
+    from apps.permissions.services import user_has_permission
+
+    return user_has_permission(request.user, permission)
 
 
 def _module_enabled(request, module_key):
@@ -42,13 +62,14 @@ def access_required(module=None, permission=None):
     """
     Decorator for module-owned views.
 
-    Usage (this phase): @access_required(module="attendance")
-    Usage (once Phase 3 lands): @access_required(module="attendance", permission="attendance.checkin")
+    Usage: @access_required(module="attendance", permission="attendance.checkin")
+    `permission=` is now enforced for real (Phase 3) -- pass a permission
+    code from apps.permissions' catalog (e.g. "finances.edit"). Omitting
+    it (the Phase 2 call style) skips the permission check entirely, same
+    as omitting `module=` skips the module check.
 
     The order checks run in is fixed inside this function -- billing,
     then module, then permission -- matching the documented access gate.
-    Existing call sites that only pass `module=` keep working unchanged
-    when `permission=` starts being enforced.
     """
 
     def decorator(view_func):

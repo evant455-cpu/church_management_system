@@ -14,7 +14,7 @@ Update the checklist below as phases complete.
 - [x] Phase 0 — Project Scaffold
 - [x] Phase 1 — Accounts, People & Tenancy (core data models)
 - [x] Phase 2 — Module System Mechanics
-- [ ] Phase 3 — Roles & Permissions Engine
+- [x] Phase 3 — Roles & Permissions Engine
 - [ ] Phase 4 — Billing & Subscription State
 - [ ] Phase 5 — Onboarding & Signup Sequence
 - [ ] Phase 6 — People & Households (feature module)

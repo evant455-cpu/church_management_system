@@ -359,6 +359,64 @@ class AccessRequiredTests(ModuleSystemTestCase):
 
         self.assertEqual(view(self._make_request(self.user)), "ok")
 
+    def test_no_permission_specified_skips_the_permission_check(self):
+        enable_module(self.congregation, "finances", self.user)
+        # no role assigned at all -- would fail if a permission check ran
+
+        @access_required(module="finances")
+        def view(request):
+            return "ok"
+
+        self.assertEqual(view(self._make_request(self.user)), "ok")
+
+    def test_blocks_when_permission_missing(self):
+        from django.core.exceptions import PermissionDenied
+
+        from apps.permissions.services import copy_default_roles_to_congregation
+
+        enable_module(self.congregation, "finances", self.user)
+        copy_default_roles_to_congregation(self.congregation)  # user holds no role yet
+
+        @access_required(module="finances", permission="finances.edit")
+        def view(request):
+            return "ok"
+
+        with self.assertRaises(PermissionDenied):
+            view(self._make_request(self.user))
+
+    def test_allows_when_permission_present(self):
+        from apps.permissions.services import assign_role_to_user, copy_default_roles_to_congregation
+
+        enable_module(self.congregation, "finances", self.user)
+        roles = copy_default_roles_to_congregation(self.congregation)
+        assign_role_to_user(self.user, roles["finance"])
+
+        @access_required(module="finances", permission="finances.edit")
+        def view(request):
+            return "ok"
+
+        self.assertEqual(view(self._make_request(self.user)), "ok")
+
+    def test_module_check_runs_before_permission_check(self):
+        from django.core.exceptions import PermissionDenied
+
+        from apps.permissions.services import assign_role_to_user, copy_default_roles_to_congregation
+
+        # finances left disabled, but the user *does* hold finances.edit --
+        # the module gate (layer 1) must still block first, per the
+        # documented fixed check order.
+        roles = copy_default_roles_to_congregation(self.congregation)
+        assign_role_to_user(self.user, roles["finance"])
+
+        @access_required(module="finances", permission="finances.edit")
+        def view(request):
+            return "ok"
+
+        with self.assertRaises(PermissionDenied) as ctx:
+            view(self._make_request(self.user))
+        self.assertIn("finances", str(ctx.exception))
+        self.assertIn("not enabled", str(ctx.exception))
+
 
 # --- Model-level constraints ----------------------------------------------
 
