@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Confirm disable{% endblock %}
+{% block content %}
+  <h1>Disabling {{ cm.module.name }} will also disable:</h1>
+  <ul>
+    {% for m in affected %}<li>{{ m.name }}</li>{% endfor %}
+  </ul>
+  <form method="post" action="{% url 'module_system:toggle_module' cm.module.key %}">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="disable">
+    <input type="hidden" name="confirm" value="true">
+    <button type="submit">Yes, disable {{ cm.module.name }} and these</button>
+  </form>
+  <a href="{% url 'module_system:module_list' %}">Cancel</a>
+{% endblock %}
