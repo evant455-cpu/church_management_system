@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Sign up — something went wrong{% endblock %}
+{% block content %}
+  <h1>Something went wrong creating your account</h1>
+  <p>Your card was not charged. {{ message }}</p>
+  <form method="post" action="{% url 'onboarding:finish' %}">
+    {% csrf_token %}
+    <button type="submit">Try again</button>
+  </form>
+{% endblock %}

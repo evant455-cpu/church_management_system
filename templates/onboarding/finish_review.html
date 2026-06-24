@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Sign up — review and finish{% endblock %}
+{% block content %}
+  <h1>Review and finish</h1>
+  <ul>
+    <li>Owner: {{ state.account.first_name }} {{ state.account.last_name }} ({{ state.account.email }})</li>
+    <li>Congregation: {{ state.congregation.name }} ({{ state.congregation.timezone }})</li>
+    <li>Modules: {{ state.modules.modules|join:", " }}</li>
+  </ul>
+  <form method="post">
+    {% csrf_token %}
+    <button type="submit">Create my account</button>
+  </form>
+{% endblock %}

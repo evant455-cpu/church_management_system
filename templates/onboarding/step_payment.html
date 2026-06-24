@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Sign up — add a card{% endblock %}
+{% block content %}
+  <h1>Add a card</h1>
+  <p>Step 3 of 4 — you won't be charged today. Your free trial starts as soon as you finish signing up.</p>
+
+  {% if form.errors %}
+    <p>{{ form.errors }}</p>
+  {% endif %}
+  <div id="card-errors" role="alert"></div>
+
+  <form id="payment-form" method="post">
+    {% csrf_token %}
+    <div id="card-element"></div>
+    <input type="hidden" name="payment_method_id" id="payment_method_id">
+    <button id="submit-button" type="submit">Continue</button>
+  </form>
+
+  <script src="https://js.stripe.com/v3/"></script>
+  <script>
+    var stripe = Stripe("{{ stripe_publishable_key }}");
+    var elements = stripe.elements();
+    var cardElement = elements.create("card");
+    cardElement.mount("#card-element");
+
+    var form = document.getElementById("payment-form");
+    var submitButton = document.getElementById("submit-button");
+    var errorBox = document.getElementById("card-errors");
+
+    form.addEventListener("submit", function (event) {
+      // payment_method_id isn't filled in yet on the first submit --
+      // confirm the SetupIntent first, fill the hidden field, then
+      // resubmit the same form programmatically. Stripe.js does the
+      // card-number handling entirely in its own iframe; the number
+      // itself never touches this page's JS or this server.
+      if (document.getElementById("payment_method_id").value) {
+        return;
+      }
+      event.preventDefault();
+      submitButton.disabled = true;
+      errorBox.textContent = "";
+
+      stripe.confirmCardSetup("{{ client_secret }}", {
+        payment_method: { card: cardElement }
+      }).then(function (result) {
+        if (result.error) {
+          errorBox.textContent = result.error.message;
+          submitButton.disabled = false;
+        } else {
+          document.getElementById("payment_method_id").value = result.setupIntent.payment_method;
+          form.submit();
+        }
+      });
+    });
+  </script>
+{% endblock %}

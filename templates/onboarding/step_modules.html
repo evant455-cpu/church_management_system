@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Sign up — choose your modules{% endblock %}
+{% block content %}
+  <h1>Choose what to turn on</h1>
+  <p>Step 4 of 4 — you can change this any time after signup.</p>
+  <form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">Continue</button>
+  </form>
+{% endblock %}

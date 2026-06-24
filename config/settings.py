@@ -56,6 +56,9 @@ LOCAL_APPS = [
     "apps.services",
     "apps.announcements",
     "apps.finances",
+    # Phase 5 -- depends on every app above (congregations, people, users,
+    # roles, modules, billing), has no models of its own, so it's last.
+    "apps.onboarding",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + LOCAL_APPS
@@ -155,3 +158,12 @@ STRIPE_WEBHOOK_SECRET = env("STRIPE_WEBHOOK_SECRET", default="whsec_placeholder"
 # Single-tier product (subscription_billing_schema.md) -- one Stripe
 # Price ID for the whole app, no plan-comparison logic.
 STRIPE_PRICE_ID = env("STRIPE_PRICE_ID", default="price_placeholder")
+# Phase 5 -- Stripe Elements (the signup wizard's card field) runs in the
+# browser and needs the *publishable* key, never the secret key. Safe to
+# expose client-side by design; still environment-configured rather than
+# hardcoded so test/staging/production can each point at their own Stripe
+# account's publishable key.
+STRIPE_PUBLISHABLE_KEY = env("STRIPE_PUBLISHABLE_KEY", default="pk_test_placeholder")
+# Not specified in any schema doc -- 14 days is a reasonable default for
+# a single-tier SaaS trial; revisit if the business decides otherwise.
+STRIPE_TRIAL_PERIOD_DAYS = env.int("STRIPE_TRIAL_PERIOD_DAYS", default=14)
