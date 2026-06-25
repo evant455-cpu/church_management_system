@@ -10,13 +10,14 @@ plain dict that gets stashed into the session (see services.py).
 
 from __future__ import annotations
 
+import zoneinfo
+
 from django import forms
 from django.contrib.auth import password_validation
 from django.contrib.auth.hashers import make_password
 
 from apps.accounts.models import User
 from apps.module_system.registry import AVAILABLE_MODULES
-from apps.tenancy.models import validate_timezone
 
 
 class AccountForm(forms.Form):
@@ -72,18 +73,69 @@ class AccountForm(forms.Form):
         }
 
 
+def _grouped_timezone_choices():
+    """
+    Groups by IANA area prefix (Africa/, America/, Etc/, ...) so the
+    dropdown isn't one flat 400+ item list -- Django's ChoiceField/Select
+    natively renders a list of (group_label, [(value, label), ...]) as
+    <optgroup>s. Built from zoneinfo.available_timezones() directly (the
+    same source tenancy.models.validate_timezone() checks against), so
+    every option here is guaranteed valid -- no second list to keep in
+    sync, and no path for an invalid value to reach the model.
+
+    A handful of legacy top-level names (no "/" at all -- "UTC", "CET",
+    "Singapore", and similar backward-compatibility aliases) don't have a
+    real area prefix to group by. Without handling them, each one becomes
+    its own single-item group named after itself, which renders as visual
+    noise. They're still fully selectable (nothing here narrows what's
+    valid), just bucketed under one "Other" group instead.
+    """
+    groups: dict[str, list[tuple[str, str]]] = {}
+    for tz in sorted(zoneinfo.available_timezones()):
+        area = tz.split("/", 1)[0] if "/" in tz else "Other"
+        groups.setdefault(area, []).append((tz, tz))
+    # "Other" last rather than wherever it'd alphabetically fall --
+    # it's a catch-all, not a real region, so it reads better at the end.
+    other = groups.pop("Other", None)
+    ordered = sorted(groups.items())
+    if other:
+        ordered.append(("Other", other))
+    return ordered
+
+
+TIMEZONE_CHOICES = _grouped_timezone_choices()
+
+# Congregation size, for onboarding personalization only (see
+# people_households_users_schema.md / README) -- not used to gate
+# anything functionally. Ranges chosen to roughly track the commonly
+# cited congregational-research breakpoints (family/pastoral/program/
+# corporate-sized), rounded to numbers that read cleanly in a dropdown.
+# The stored value is the range string itself, matching the
+# `size_category` examples ("1-50", "51-200") documented in the schema.
+SIZE_CATEGORY_CHOICES = [
+    ("", "Prefer not to say"),
+    ("1-50", "Small (1–50)"),
+    ("51-200", "Medium (51–200)"),
+    ("201-500", "Large (201–500)"),
+    ("501+", "Very Large (501+)"),
+]
+
+
 class CongregationForm(forms.Form):
     """Step 2 -- congregation profile, matching tenancy.Congregation field-for-field."""
 
     name = forms.CharField(max_length=200)
-    timezone = forms.CharField(max_length=50, help_text="IANA name, e.g. 'America/Chicago'.")
+    timezone = forms.ChoiceField(
+        choices=TIMEZONE_CHOICES,
+        help_text="Pick the zone where your congregation actually meets.",
+    )
     address_line1 = forms.CharField(max_length=255, required=False)
     address_line2 = forms.CharField(max_length=255, required=False)
     city = forms.CharField(max_length=100, required=False)
     state = forms.CharField(max_length=100, required=False)
     postal_code = forms.CharField(max_length=20, required=False)
     country = forms.CharField(max_length=100, required=False)
-    size_category = forms.CharField(max_length=30, required=False)
+    size_category = forms.ChoiceField(choices=SIZE_CATEGORY_CHOICES, required=False)
 
     _OPTIONAL_FIELDS = (
         "address_line1",
@@ -94,15 +146,6 @@ class CongregationForm(forms.Form):
         "country",
         "size_category",
     )
-
-    def clean_timezone(self):
-        value = self.cleaned_data["timezone"]
-        # Reuses tenancy.models.validate_timezone rather than re-implementing
-        # the same zoneinfo.available_timezones() check a second time --
-        # it raises django.core.exceptions.ValidationError, which is the
-        # exact same class forms.ValidationError aliases.
-        validate_timezone(value)
-        return value
 
     def session_data(self) -> dict:
         data = dict(self.cleaned_data)

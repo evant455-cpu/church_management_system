@@ -98,6 +98,24 @@ class CongregationFormTests(TestCase):
         self.assertFalse(form.is_valid())
         self.assertIn("timezone", form.errors)
 
+    def test_timezone_is_a_fixed_dropdown_not_freeform_text(self):
+        # A real but differently-cased/spaced string should be rejected --
+        # ChoiceField only accepts an exact match from zoneinfo, not a
+        # freeform guess at the right spelling.
+        form = CongregationForm({"name": "Grace Chapel", "timezone": "america/chicago"})
+        self.assertFalse(form.is_valid())
+        self.assertIn("timezone", form.errors)
+
+    def test_size_category_must_be_one_of_the_defined_buckets(self):
+        form = CongregationForm({"name": "Grace Chapel", "timezone": "UTC", "size_category": "tiny"})
+        self.assertFalse(form.is_valid())
+        self.assertIn("size_category", form.errors)
+
+    def test_size_category_accepts_a_defined_bucket(self):
+        form = CongregationForm({"name": "Grace Chapel", "timezone": "UTC", "size_category": "501+"})
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.session_data()["size_category"], "501+")
+
     def test_blank_optional_fields_become_none_in_session_data(self):
         form = CongregationForm({"name": "Grace Chapel", "timezone": "UTC"})
         self.assertTrue(form.is_valid(), form.errors)
