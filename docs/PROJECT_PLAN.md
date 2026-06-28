@@ -16,7 +16,7 @@ Update the checklist below as phases complete.
 - [x] Phase 2 — Module System Mechanics
 - [x] Phase 3 — Roles & Permissions Engine
 - [x] Phase 4 — Billing & Subscription State
-- [ ] Phase 5 — Onboarding & Signup Sequence
+- [x] Phase 5 — Onboarding & Signup Sequence
 - [ ] Phase 6 — People & Households (feature module)
 - [ ] Phase 7 — Staff
 - [ ] Phase 8 — Attendance
