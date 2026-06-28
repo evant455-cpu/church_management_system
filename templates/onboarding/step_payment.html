@@ -44,6 +44,23 @@
         payment_method: { card: cardElement }
       }).then(function (result) {
         if (result.error) {
+          // A prior attempt against this same cached SetupIntent may have
+          // already succeeded (e.g. a slow response, or a resubmit before
+          // this page heard back) -- Stripe's error for that case still
+          // hands back the setup_intent it's complaining about, including
+          // the payment_method it already attached. Reuse it instead of
+          // showing an error for something that, from the user's side,
+          // already worked.
+          if (
+            result.error.code === "setup_intent_unexpected_state" &&
+            result.error.setup_intent &&
+            result.error.setup_intent.status === "succeeded" &&
+            result.error.setup_intent.payment_method
+          ) {
+            document.getElementById("payment_method_id").value = result.error.setup_intent.payment_method;
+            form.submit();
+            return;
+          }
           errorBox.textContent = result.error.message;
           submitButton.disabled = false;
         } else {
