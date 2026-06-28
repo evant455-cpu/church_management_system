@@ -407,6 +407,12 @@ class SignupFlowServiceTests(BillingTestCase):
         mocked.assert_called_once_with("sub_abc")
         self.assertEqual(result, "canceled")
 
+    def test_delete_stripe_customer_for_compensation_delegates(self):
+        with mock.patch.object(stripe_client, "delete_customer", return_value="deleted") as mocked:
+            result = services.delete_stripe_customer_for_compensation("cus_abc")
+        mocked.assert_called_once_with("cus_abc")
+        self.assertEqual(result, "deleted")
+
 
 # --- services.py -- webhook processing ----------------------------------
 

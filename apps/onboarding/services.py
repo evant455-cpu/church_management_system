@@ -167,9 +167,11 @@ def complete_signup(*, account: dict, congregation_data: dict, modules_selected,
 
     Safe to call again with the same arguments after either exception --
     StripeSetupFailed means nothing local or remote exists yet; after
-    SignupTransactionFailed, the prior Stripe Customer/Subscription has
-    already been canceled, so a retry simply creates a fresh pair rather
-    than reusing the canceled one.
+    SignupTransactionFailed, the prior Stripe Subscription has been
+    canceled and the Customer deleted (which also frees up
+    payment_method_id, since a PaymentMethod can only ever be attached
+    to one Customer), so a retry creates a fresh pair rather than
+    colliding with the failed attempt's leftovers.
 
     Returns (user, congregation) on success.
     """
@@ -206,27 +208,49 @@ def complete_signup(*, account: dict, congregation_data: dict, modules_selected,
                 exc,
             )
 
+    subscription_canceled = False
     try:
         billing_services.cancel_stripe_subscription_for_compensation(stripe_subscription.id)
-        logger.error(
-            "Signup local transaction failed after %s attempts for %s; "
-            "compensated by canceling stripe subscription %s.",
-            LOCAL_TRANSACTION_MAX_ATTEMPTS,
-            account.get("email"),
-            stripe_subscription.id,
-        )
+        subscription_canceled = True
     except Exception:
         # The documented backstop reconciliation job (a periodic sweep
         # for orphaned Stripe subscriptions with no local Subscription
         # row) isn't built in this phase -- PROJECT_PLAN.md's Phase 5
-        # scope is the compensating *action*, not that job. This is the
-        # one case current code can't fully recover from on its own.
+        # scope is the compensating *action*, not that job. This is one
+        # of the cases current code can't fully recover from on its own.
         logger.critical(
-            "Signup compensation FAILED -- stripe subscription %s for %s is orphaned "
-            "and needs manual cleanup (no backstop reconciliation job built yet).",
+            "Signup compensation FAILED to cancel stripe subscription %s for %s -- "
+            "orphaned, needs manual cleanup (no backstop reconciliation job built yet).",
             stripe_subscription.id,
             account.get("email"),
             exc_info=True,
+        )
+
+    try:
+        billing_services.delete_stripe_customer_for_compensation(customer.id)
+    except Exception:
+        # Canceling the subscription alone leaves payment_method_id
+        # attached to this now-orphaned Customer -- a PaymentMethod can
+        # only be attached to one Customer ever, so without this, a
+        # retry against the same (deliberately preserved) session data
+        # fails Stripe-side with "already been attached to a customer".
+        logger.critical(
+            "Signup compensation FAILED to delete stripe customer %s for %s -- payment method "
+            "%s stays attached and can't be reused on retry until this is cleaned up manually.",
+            customer.id,
+            account.get("email"),
+            payment_method_id,
+            exc_info=True,
+        )
+
+    if subscription_canceled:
+        logger.error(
+            "Signup local transaction failed after %s attempts for %s; "
+            "compensated by canceling stripe subscription %s and deleting stripe customer %s.",
+            LOCAL_TRANSACTION_MAX_ATTEMPTS,
+            account.get("email"),
+            stripe_subscription.id,
+            customer.id,
         )
 
     raise SignupTransactionFailed(

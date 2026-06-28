@@ -132,6 +132,15 @@ def cancel_stripe_subscription_for_compensation(stripe_subscription_id):
     return stripe_client.cancel_subscription(stripe_subscription_id)
 
 
+def delete_stripe_customer_for_compensation(stripe_customer_id):
+    """
+    The other half of compensation -- see stripe_client.delete_customer()
+    for why this has to happen too, not just the subscription
+    cancellation above.
+    """
+    return stripe_client.delete_customer(stripe_customer_id)
+
+
 def create_subscription_record(*, congregation, stripe_customer, stripe_subscription):
     """
     Local DB half of signup's "Finish" transaction. Deliberately does

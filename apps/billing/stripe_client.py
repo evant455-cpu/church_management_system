@@ -67,6 +67,21 @@ def cancel_subscription(stripe_subscription_id: str):
     return stripe.Subscription.cancel(stripe_subscription_id)
 
 
+def delete_customer(stripe_customer_id: str):
+    """
+    The other half of Phase 5's compensation. Canceling the subscription
+    alone leaves the Customer (and the PaymentMethod create_customer()
+    attached to it) behind -- and a PaymentMethod can only ever be
+    attached to one Customer. Without this, a retry against the same
+    cached payment_method_id (onboarding's session data is deliberately
+    kept across a failed Finish attempt) fails with "already been
+    attached to a customer", since the orphaned Customer from the failed
+    attempt is still holding onto it. Deleting the Customer detaches it
+    and frees it up for the retry.
+    """
+    return stripe.Customer.delete(stripe_customer_id)
+
+
 def construct_webhook_event(payload: bytes, sig_header: str, webhook_secret: str):
     """
     Verifies the Stripe-Signature header and returns the parsed Event.

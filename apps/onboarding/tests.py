@@ -357,14 +357,41 @@ class CompleteSignupTests(TestCase):
             stripe_client, "create_subscription", return_value=subscription
         ), mock.patch.object(
             services, "_write_signup_rows", side_effect=RuntimeError("permanently broken")
-        ), mock.patch.object(stripe_client, "cancel_subscription", return_value="canceled") as mock_cancel:
+        ), mock.patch.object(
+            stripe_client, "cancel_subscription", return_value="canceled"
+        ) as mock_cancel, mock.patch.object(
+            stripe_client, "delete_customer", return_value="deleted"
+        ) as mock_delete:
             with self.assertRaises(services.SignupTransactionFailed):
                 self._call()
 
         mock_cancel.assert_called_once_with("sub_test")
+        # Canceling the subscription alone isn't enough -- the Customer
+        # (and the payment_method_id it's still holding onto) has to be
+        # cleaned up too, or a retry with the same session data collides
+        # with it Stripe-side.
+        mock_delete.assert_called_once_with("cus_test")
         self.assertEqual(Congregation.objects.count(), 0)
 
-    def test_compensation_failure_is_swallowed_but_still_raises_signup_failed(self):
+    def test_compensation_continues_to_delete_customer_even_if_cancel_fails(self):
+        customer, subscription = _fake_customer_and_subscription()
+        with mock.patch.object(stripe_client, "create_customer", return_value=customer), mock.patch.object(
+            stripe_client, "create_subscription", return_value=subscription
+        ), mock.patch.object(
+            services, "_write_signup_rows", side_effect=RuntimeError("permanently broken")
+        ), mock.patch.object(
+            stripe_client, "cancel_subscription", side_effect=stripe.error.StripeError("cancel failed")
+        ), mock.patch.object(
+            stripe_client, "delete_customer", return_value="deleted"
+        ) as mock_delete:
+            with self.assertRaises(services.SignupTransactionFailed):
+                self._call()
+        # The two compensating actions are independent -- one failing
+        # doesn't skip the other, since each cleans up a different thing.
+        mock_delete.assert_called_once_with("cus_test")
+        self.assertEqual(Congregation.objects.count(), 0)
+
+    def test_compensation_failures_are_all_swallowed_but_still_raise_signup_failed(self):
         customer, subscription = _fake_customer_and_subscription()
         with mock.patch.object(stripe_client, "create_customer", return_value=customer), mock.patch.object(
             stripe_client, "create_subscription", return_value=subscription
@@ -372,6 +399,8 @@ class CompleteSignupTests(TestCase):
             services, "_write_signup_rows", side_effect=RuntimeError("permanently broken")
         ), mock.patch.object(
             stripe_client, "cancel_subscription", side_effect=stripe.error.StripeError("cancel also failed")
+        ), mock.patch.object(
+            stripe_client, "delete_customer", side_effect=stripe.error.StripeError("delete also failed")
         ):
             with self.assertRaises(services.SignupTransactionFailed):
                 self._call()
@@ -383,7 +412,9 @@ class CompleteSignupTests(TestCase):
             stripe_client, "create_subscription", return_value=subscription
         ), mock.patch.object(
             services, "_write_signup_rows", side_effect=RuntimeError("permanently broken")
-        ) as mock_write, mock.patch.object(stripe_client, "cancel_subscription", return_value="canceled"):
+        ) as mock_write, mock.patch.object(
+            stripe_client, "cancel_subscription", return_value="canceled"
+        ), mock.patch.object(stripe_client, "delete_customer", return_value="deleted"):
             with self.assertRaises(services.SignupTransactionFailed):
                 self._call()
         self.assertEqual(mock_write.call_count, services.LOCAL_TRANSACTION_MAX_ATTEMPTS)
