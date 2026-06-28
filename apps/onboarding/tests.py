@@ -35,8 +35,10 @@ def _fake_customer_and_subscription():
         id="sub_test",
         status="trialing",
         trial_end=None,
-        current_period_start=None,
-        current_period_end=None,
+        # current_period_start/end live on the subscription item, not the
+        # top-level object, as of Stripe's Basil API version -- see
+        # apps.billing.services._subscription_period()'s docstring.
+        items=FakeStripeObject(data=[FakeStripeObject(current_period_start=None, current_period_end=None)]),
     )
     return customer, subscription
 

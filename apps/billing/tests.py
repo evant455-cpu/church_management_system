@@ -358,12 +358,18 @@ class SignupFlowServiceTests(BillingTestCase):
         period_start = int(datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc).timestamp())
         period_end = int(datetime.datetime(2026, 7, 1, tzinfo=datetime.timezone.utc).timestamp())
         fake_customer = FakeStripeObject(id="cus_abc")
+        # current_period_start/end live on the subscription item, not the
+        # top-level Subscription object, as of Stripe's Basil API version --
+        # see _subscription_period()'s docstring in services.py.
         fake_subscription = FakeStripeObject(
             id="sub_abc",
             status="trialing",
             trial_end=trial_end,
-            current_period_start=period_start,
-            current_period_end=period_end,
+            items=FakeStripeObject(
+                data=[
+                    FakeStripeObject(current_period_start=period_start, current_period_end=period_end),
+                ]
+            ),
         )
 
         subscription = services.create_subscription_record(
@@ -375,11 +381,25 @@ class SignupFlowServiceTests(BillingTestCase):
         self.assertEqual(subscription.stripe_subscription_id, "sub_abc")
         self.assertEqual(subscription.status, Subscription.Status.TRIALING)
         self.assertEqual(subscription.trial_ends_at, datetime.datetime(2026, 7, 1, tzinfo=datetime.timezone.utc))
+        self.assertEqual(subscription.current_period_start, datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc))
+        self.assertEqual(subscription.current_period_end, datetime.datetime(2026, 7, 1, tzinfo=datetime.timezone.utc))
 
         events = SubscriptionEvent.objects.filter(congregation=self.congregation)
         self.assertEqual(events.count(), 1)
         self.assertEqual(events.first().event_type, "trial_started")
         self.assertEqual(events.first().source, SubscriptionEvent.Source.ADMIN_ACTION)
+
+    def test_create_subscription_record_handles_missing_items_gracefully(self):
+        # Defensive case: no items at all shouldn't crash signup, just
+        # leave the period fields null.
+        fake_customer = FakeStripeObject(id="cus_abc")
+        fake_subscription = FakeStripeObject(id="sub_abc", status="trialing", trial_end=None)
+
+        subscription = services.create_subscription_record(
+            congregation=self.congregation, stripe_customer=fake_customer, stripe_subscription=fake_subscription
+        )
+        self.assertIsNone(subscription.current_period_start)
+        self.assertIsNone(subscription.current_period_end)
 
     def test_cancel_stripe_subscription_for_compensation_delegates(self):
         with mock.patch.object(stripe_client, "cancel_subscription", return_value="canceled") as mocked:
@@ -446,6 +466,29 @@ class ProcessWebhookEventTests(BillingTestCase):
         event_row = SubscriptionEvent.objects.get(stripe_event_id="evt_2")
         self.assertEqual(event_row.event_type, "status_changed")
         self.assertEqual(event_row.source, SubscriptionEvent.Source.STRIPE_WEBHOOK)
+
+    def test_updated_event_refreshes_period_from_subscription_item(self):
+        # Regression test: current_period_start/end live on the
+        # subscription item, not the top-level object, as of Stripe's
+        # Basil API version. This is exactly the shape a real webhook
+        # payload has -- this test would have caught the bug a flat
+        # top-level fixture couldn't.
+        new_start = int(datetime.datetime(2026, 7, 1, tzinfo=datetime.timezone.utc).timestamp())
+        new_end = int(datetime.datetime(2026, 8, 1, tzinfo=datetime.timezone.utc).timestamp())
+        event = _fake_event(
+            "evt_period",
+            "customer.subscription.updated",
+            {
+                "id": "sub_test",
+                "status": "active",
+                "items": {"data": [{"current_period_start": new_start, "current_period_end": new_end}]},
+            },
+        )
+        result = services.process_webhook_event(event)
+        self.assertTrue(result)
+        self.subscription.refresh_from_db()
+        self.assertEqual(self.subscription.current_period_start, datetime.datetime(2026, 7, 1, tzinfo=datetime.timezone.utc))
+        self.assertEqual(self.subscription.current_period_end, datetime.datetime(2026, 8, 1, tzinfo=datetime.timezone.utc))
 
     def test_status_mapping_incomplete_expired_to_canceled(self):
         event = _fake_event(

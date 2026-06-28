@@ -72,6 +72,27 @@ def _to_datetime(unix_ts):
     return datetime.datetime.fromtimestamp(unix_ts, tz=datetime.timezone.utc)
 
 
+def _subscription_period(stripe_subscription):
+    """
+    Stripe's Basil API version (2025-03-31) removed current_period_start
+    and current_period_end from the top-level Subscription object --
+    they now live on each subscription item instead. See
+    https://docs.stripe.com/changelog/basil/2025-03-31/deprecate-subscription-current-period-start-and-end.
+
+    This app only ever creates a single-item subscription (one price,
+    no add-ons -- subscription_billing_schema.md's single-tier model),
+    so the first item's period is the subscription's period for our
+    purposes. Returns (None, None) if items are missing entirely rather
+    than raising, since a malformed/partial webhook payload shouldn't
+    crash event processing.
+    """
+    items_data = (stripe_subscription.get("items") or {}).get("data") or []
+    if not items_data:
+        return None, None
+    first_item = items_data[0]
+    return first_item.get("current_period_start"), first_item.get("current_period_end")
+
+
 # --- Signup-flow scaffolding (called by Phase 5) ---------------------------
 
 
@@ -120,14 +141,15 @@ def create_subscription_record(*, congregation, stripe_customer, stripe_subscrip
     fighting it for atomicity. Callers in this phase's tests wrap it
     themselves.
     """
+    period_start, period_end = _subscription_period(stripe_subscription)
     subscription = Subscription.objects.create(
         congregation=congregation,
         stripe_customer_id=stripe_customer.id,
         stripe_subscription_id=stripe_subscription.id,
         status=STRIPE_STATUS_MAP.get(stripe_subscription.status, Subscription.Status.TRIALING),
         trial_ends_at=_to_datetime(stripe_subscription.trial_end),
-        current_period_start=_to_datetime(stripe_subscription.current_period_start),
-        current_period_end=_to_datetime(stripe_subscription.current_period_end),
+        current_period_start=_to_datetime(period_start),
+        current_period_end=_to_datetime(period_end),
     )
     SubscriptionEvent.objects.create(
         congregation=congregation,
@@ -200,10 +222,9 @@ def _process_subscription_status_event(event):
         trial_end = event.data.object.get("trial_end")
         if trial_end is not None:
             subscription.trial_ends_at = _to_datetime(trial_end)
-        period_start = event.data.object.get("current_period_start")
+        period_start, period_end = _subscription_period(event.data.object)
         if period_start is not None:
             subscription.current_period_start = _to_datetime(period_start)
-        period_end = event.data.object.get("current_period_end")
         if period_end is not None:
             subscription.current_period_end = _to_datetime(period_end)
         if new_status == Subscription.Status.CANCELED and old_status != Subscription.Status.CANCELED:
