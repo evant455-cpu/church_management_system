@@ -8,21 +8,12 @@ from django.urls import reverse
 from apps.accounts.models import User
 from apps.billing import stripe_client
 from apps.billing.models import Subscription, SubscriptionEvent
+from apps.billing.test_helpers import FakeStripeObject
 from apps.module_system.models import CongregationModule, CongregationModuleHistory
 from apps.onboarding import services
 from apps.onboarding.forms import AccountForm, CongregationForm, ModuleSelectionForm
 from apps.permissions.models import UserRole
 from apps.tenancy.models import Congregation
-
-
-class FakeStripeObject(dict):
-    """Same stand-in apps.billing.tests uses -- attribute AND dict-style access, no SDK/network dependency."""
-
-    def __getattr__(self, name):
-        try:
-            return self[name]
-        except KeyError:
-            raise AttributeError(name)
 
 
 def _fake_intent(secret="seti_secret_test"):
@@ -38,7 +29,7 @@ def _fake_customer_and_subscription():
         # current_period_start/end live on the subscription item, not the
         # top-level object, as of Stripe's Basil API version -- see
         # apps.billing.services._subscription_period()'s docstring.
-        items=FakeStripeObject(data=[FakeStripeObject(current_period_start=None, current_period_end=None)]),
+        items={"data": [{"current_period_start": None, "current_period_end": None}]},
     )
     return customer, subscription
 

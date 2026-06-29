@@ -12,9 +12,36 @@ from apps.accounts.models import User
 from apps.billing import services, stripe_client
 from apps.billing.access import owner_required
 from apps.billing.models import Subscription, SubscriptionEvent
+from apps.billing.test_helpers import FakeStripeObject
 from apps.module_system.access import access_required
 from apps.people.models import Person
 from apps.tenancy.models import Congregation
+
+
+class FakeStripeObjectFidelityTests(TestCase):
+    """
+    Guards the thing that let two real bugs reach production: this
+    fixture must NOT support dict methods, because real Stripe objects
+    (stripe-python v15+) don't either. If someone "fixes" a failing test
+    by making FakeStripeObject dict-like again, this test should fail
+    and say exactly why not to.
+    """
+
+    def test_does_not_support_get(self):
+        obj = FakeStripeObject(id="sub_123")
+        self.assertFalse(hasattr(obj, "get"))
+        with self.assertRaises(AttributeError):
+            obj.get("id")
+
+    def test_supports_attribute_and_bracket_access(self):
+        obj = FakeStripeObject(id="sub_123")
+        self.assertEqual(obj.id, "sub_123")
+        self.assertEqual(obj["id"], "sub_123")
+
+    def test_nested_dicts_and_lists_are_recursively_wrapped(self):
+        obj = FakeStripeObject(items={"data": [{"current_period_start": 100}]})
+        self.assertEqual(obj.items.data[0].current_period_start, 100)
+        self.assertFalse(hasattr(obj.items, "get"))
 
 
 class BillingTestCase(TestCase):
@@ -315,18 +342,6 @@ class StripeClientTests(TestCase):
 
 
 # --- services.py -- signup-flow scaffolding (mocks stripe_client) ------
-
-
-class FakeStripeObject(dict):
-    """Stands in for stripe.StripeObject -- supports both attribute access
-    (obj.id) and dict-style .get() (obj.get('x')), exactly like the real
-    SDK's objects, without depending on stripe internals or the network."""
-
-    def __getattr__(self, name):
-        try:
-            return self[name]
-        except KeyError:
-            raise AttributeError(name)
 
 
 class SignupFlowServiceTests(BillingTestCase):

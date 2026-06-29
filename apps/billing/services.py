@@ -85,12 +85,22 @@ def _subscription_period(stripe_subscription):
     purposes. Returns (None, None) if items are missing entirely rather
     than raising, since a malformed/partial webhook payload shouldn't
     crash event processing.
+
+    Uses getattr() throughout, not .get() -- as of stripe-python v15,
+    StripeObject no longer inherits from dict, so .get()/.keys()/.items()
+    don't exist on real Stripe objects anymore, only attribute access and
+    bracket notation do. See
+    https://github.com/stripe/stripe-python/wiki/Migration-guide-for-v15.
+    This bit us live (an AttributeError on .get()) because our test
+    fixtures were dict-based and silently tolerated .get() when the real
+    SDK never would have.
     """
-    items_data = (stripe_subscription.get("items") or {}).get("data") or []
+    items = getattr(stripe_subscription, "items", None)
+    items_data = getattr(items, "data", None) or []
     if not items_data:
         return None, None
     first_item = items_data[0]
-    return first_item.get("current_period_start"), first_item.get("current_period_end")
+    return getattr(first_item, "current_period_start", None), getattr(first_item, "current_period_end", None)
 
 
 # --- Signup-flow scaffolding (called by Phase 5) ---------------------------
@@ -225,10 +235,10 @@ def _process_subscription_status_event(event):
             app_event_type = "status_changed"
 
         subscription.status = new_status
-        cancel_at_period_end = event.data.object.get("cancel_at_period_end")
+        cancel_at_period_end = getattr(event.data.object, "cancel_at_period_end", None)
         if cancel_at_period_end is not None:
             subscription.cancel_at_period_end = cancel_at_period_end
-        trial_end = event.data.object.get("trial_end")
+        trial_end = getattr(event.data.object, "trial_end", None)
         if trial_end is not None:
             subscription.trial_ends_at = _to_datetime(trial_end)
         period_start, period_end = _subscription_period(event.data.object)
@@ -251,7 +261,7 @@ def _process_subscription_status_event(event):
 
 
 def _process_invoice_event(event):
-    stripe_subscription_id = event.data.object.get("subscription")
+    stripe_subscription_id = getattr(event.data.object, "subscription", None)
     if not stripe_subscription_id:
         return False
     try:
